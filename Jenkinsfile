@@ -1,45 +1,70 @@
 pipeline {
     agent any
-    tools {nodejs "node16" }
-    environment {
-        NODE_ENV='production'
-    }
     
-  
+   
     stages {
-        stage('source') {
+	
+	
+        
+        
+        
+        stage('Cloning Git') {
             steps {
-               git 'https://github.com/sd031/aws_codebuild_codedeploy_nodeJs_demo.git'
-               sh 'cat index.js'
+                checkout([$class: 'GitSCM', branches: [[name: '*/dev']], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: 'jyogithub', url: 'https://github.com/jyothishkshatri/aws_codebuild_codedeploy_nodeJs_demo.git']]])     
             }
-            
         }
-        
-         stage('build') {
-             environment{
-                 NODE_ENV='StagingGitTest'
-             }
-             
-            
+		stage('Reading prop file') {
+		
+		steps {
+         script {
+       def props = readProperties file: 'env.properties'
+        env.AWS_ACCOUNT_ID = props.AWS_ACCOUNT_ID
+        env.AWS_DEFAULT_REGION = props.AWS_DEFAULT_REGION
+        env.IMAGE_REPO_NAME = props.IMAGE_REPO_NAME
+        env.IMAGE_TAG = props.IMAGE_TAG
+        env.REPOSITORY_URI = props.REPOSITORY_URI
+		
+		sh "echo aws account ID is $AWS_ACCOUNT_ID"
+		sh "echo aws region is $AWS_DEFAULT_REGION"
+		sh "echo image tag is $IMAGE_TAG"
+		sh "echo repo uri is $REPOSITORY_URI"
+		sh "echo repo name is ${env.GIT_URL}"
+		sh "echo branch name is ${env.BRANCH_NAME}"
+		sh "echo branch git name is ${env.GIT_BRANCH}"
+
+         }
+		
+		}
+
+}
+
+ stage('Logging into AWS ECR') {
             steps {
-             echo NODE_ENV
-             withCredentials([string(credentialsId: 'e8f8ff88-49e0-433a-928d-36a518cd30d6', variable: 'secver')]) {
-                // some block
-                echo secver
+                script {
+                sh "aws ecr get-login-password --region ${AWS_DEFAULT_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
+                }
+                 
             }
-                         sh 'npm install'
-            }
-            
         }
-        
-         stage('saveArtifact') {
-            steps {
-              archiveArtifacts artifacts: '**', followSymlinks: false
-            }
-            
+
+  
+    // Building Docker images
+    stage('Building image') {
+      steps{
+        script {
+          dockerImage = docker.build "${IMAGE_REPO_NAME}:${IMAGE_TAG}"
         }
-        
-        
-        
+      }
+    }
+   
+    // Uploading Docker images into AWS ECR
+    stage('Pushing to ECR') {
+     steps{  
+         script {
+                sh "docker tag ${IMAGE_REPO_NAME}:${IMAGE_TAG} ${REPOSITORY_URI}:$IMAGE_TAG"
+                sh "docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${IMAGE_REPO_NAME}:${IMAGE_TAG}"
+         }
+        }
+      }
     }
 }
