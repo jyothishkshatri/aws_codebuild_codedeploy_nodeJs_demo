@@ -1,6 +1,6 @@
 FROM node:14
 
-# Setting working directory. All the path will be relative to WORKDIR
+# Setting working directory. All the path will be relative to WORKDIR to usr
 WORKDIR /usr/src/app
 
 # Install app dependencies
